@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Network Intrusion Detector</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Real-Time Packet Alerts</h1>
+    <ul id="alerts"></ul>
+    <script>
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('Connected to detection server.');
+        });
+
+        // Listen for real-time alerts pushed from Scapy
+        socket.on('ip_alert', (data) => {
+            const alertsList = document.getElementById('alerts');
+            const newAlert = document.createElement('li');
+            newAlert.style.color = 'red';
+            newAlert.textContent = `[ALERT] High traffic detected! ${data.src_ip} sent ${data.packet_count} pkts in last ${data.packet_count}s`;
+            alertsList.prepend(newAlert);
+        });
+    </script>
+</body>
