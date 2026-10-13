@@ -2,13 +2,48 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Network Intrusion Detector</title>
+    <title>Net-Sentinel-AI Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <h1>Real-Time Packet Alerts</h1>
-    <ul id="alerts"></ul>
+<body class="bg-gray-900 text-gray-100 font-sans antialiased">
+    <div class="flex h-screen overflow-hidden">
+        <main class="flex-1 overflow-y-auto p-8">
+            <header class="flex justify-between items-center mb-8 border-b border-gray-800 pb-4">
+                <div>
+                    <h1 class="text-2xl font-bold tracking-wide">Net-Sentinel-AI Security Console</h1>
+                    <p class="text-sm text-gray-400 mt-1">Real-time Network Intrusion Detection & Anomaly Monitoring</p>
+                </div>
+                <span class="px-3.5 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-full text-sm font-semibold flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> System Active
+                </span>
+            </header>
+
+            <!-- KPI Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-2xl">
+                <div class="bg-gray-800/60 backdrop-blur p-5 rounded-xl border border-gray-700 shadow-lg">
+                    <p class="text-xs uppercase tracking-wider text-gray-400 font-medium">Total Packets</p>
+                    <h3 class="text-3xl font-extrabold mt-2 text-white" id="total-packets">0</h3>
+                </div>
+                <div class="bg-gray-800/60 backdrop-blur p-5 rounded-xl border border-gray-700 shadow-lg">
+                    <p class="text-xs uppercase tracking-wider text-gray-400 font-medium">Active Threats</p>
+                    <h3 class="text-3xl font-extrabold mt-2 text-red-400" id="active-threats">0</h3>
+                </div>
+            </div>
+
+            <!-- Full-Width Live Alert Stream Section -->
+            <div class="bg-gray-800/60 backdrop-blur p-6 rounded-xl border border-gray-700 shadow-lg flex flex-col h-[calc(100vh-320px)]">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold tracking-wide text-gray-200">Live Alert Stream</h3>
+                    <span class="text-xs text-gray-400 font-mono">Listening for anomalies...</span>
+                </div>
+                <ul id="alerts" class="flex-1 overflow-y-auto space-y-3 text-sm font-mono pr-2 list-none p-0 m-0">
+                    <!-- Real-time alerts will prepend here -->
+                </ul>
+            </div>
+        </main>
+    </div>
+
     <script>
         const socket = io();
 
@@ -18,11 +53,38 @@
 
         // Listen for real-time alerts pushed from Scapy
         socket.on('ip_alert', (data) => {
+            if (!data.is_anomaly) return;
+
             const alertsList = document.getElementById('alerts');
             const newAlert = document.createElement('li');
-            newAlert.style.color = 'red';
-            newAlert.textContent = `[ALERT] High traffic detected! ${data.src_ip} sent ${data.packet_count} pkts in last ${data.packet_count}s`;
+            newAlert.className = 'flex flex-col gap-1.5 bg-red-950/20 hover:bg-red-950/30 transition p-3.5 rounded-lg border border-red-900/40 text-xs font-mono shadow-sm';
+            
+            const attackLabel = data.attack_type || 'Anomaly Detected';
+            
+            newAlert.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-red-400 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping"></span>
+                        [ALERT] ${attackLabel}
+                    </span>
+                    <span class="text-gray-400 bg-gray-900/60 px-2 py-0.5 rounded">${data.packet_count} pkts</span>
+                </div>
+                <div class="text-gray-300 mt-1">Source IP: <span class="text-white font-semibold">${data.src_ip}</span></div>
+            `;
+            
             alertsList.prepend(newAlert);
+
+            // Increment counters
+            const activeThreatsEl = document.getElementById('active-threats');
+            if (activeThreatsEl) {
+                activeThreatsEl.textContent = parseInt(activeThreatsEl.textContent || '0') + 1;
+            }
+
+            const totalPacketsEl = document.getElementById('total-packets');
+            if (totalPacketsEl) {
+                totalPacketsEl.textContent = parseInt(totalPacketsEl.textContent || '0') + data.packet_count;
+            }
         });
     </script>
 </body>
+</html>

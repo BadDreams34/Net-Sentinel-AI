@@ -15,11 +15,8 @@ ip_tracker = defaultdict(lambda: {"timestamps": [], "sizes": []})
 alerted_ips = set()
 
 # Initialize Unsupervised ML Model (Isolation Forest)
-# contamination='auto' lets the model decide standard anomaly thresholds
 model = IsolationForest(contamination=0.05, random_state=42)
 
-# Warm up the model instantly with basic "normal" traffic data [packet_count, avg_packet_size]
-# This prevents errors and gives it a baseline right when it boots up.
 baseline_data = np.array([
     [5, 400], [10, 550], [2, 250], [15, 500], [8, 450], [12, 600]
 ])
@@ -49,16 +46,11 @@ def process_packet(pkt):
     src_ip = pkt[IP].src
     pkt_len = len(pkt)
 
-    #    if is_local_ip(src_ip):
-    #        return
-
     now = time.time()
     
-    # Store timestamp and packet size
     ip_tracker[src_ip]["timestamps"].append(now)
     ip_tracker[src_ip]["sizes"].append(pkt_len)
 
-    # Remove timestamps older than WINDOW_SIZE
     cutoff = now - WINDOW_SIZE
     valid_pairs = [
         (t, s) for t, s in zip(ip_tracker[src_ip]["timestamps"], ip_tracker[src_ip]["sizes"]) 
@@ -75,23 +67,26 @@ def process_packet(pkt):
 
     count = len(ip_tracker[src_ip]["timestamps"])
     
-    # ML Prediction Logic
+    # ML Prediction & Attack Classification Logic
     is_anomaly = False
-    if count > 3:  # Need at least a few packets to analyze
+    attack_type = "Normal"
+    if count > 3:  
         avg_size = sum(ip_tracker[src_ip]["sizes"]) / count
         
-        # Pass features to ML model: [[packet_count, average_packet_size]]
         features = np.array([[count, avg_size]])
-        prediction = model.predict(features)[0]  # Returns 1 for normal, -1 for anomaly
+        prediction = model.predict(features)[0]  
         
         if prediction == -1:
             is_anomaly = True
+            if count > 20:
+                attack_type = "DDoS / High-Volume Spike"
+            else:
+                attack_type = "Behavioral Anomaly"
 
-    # Alert handling logic based on ML decision
     if is_anomaly and src_ip not in alerted_ips:
         avg_size_print = sum(ip_tracker[src_ip]["sizes"]) / count if count > 0 else 0
         print(
-            f"[ML ALERT] Anomaly detected! {src_ip} sent {count} pkts (Avg Size: {avg_size_print:.1f}B) in last {WINDOW_SIZE}s"
+            f"[ML ALERT] {attack_type} detected! {src_ip} sent {count} pkts (Avg Size: {avg_size_print:.1f}B) in last {WINDOW_SIZE}s"
         )
         alerted_ips.add(src_ip)
     elif not is_anomaly and src_ip in alerted_ips:
@@ -103,7 +98,8 @@ def process_packet(pkt):
             "src_ip": src_ip, 
             "packet_count": count, 
             "window_size": WINDOW_SIZE,
-            "is_anomaly": is_anomaly
+            "is_anomaly": is_anomaly,
+            "attack_type": attack_type
         },
     )
 
@@ -111,7 +107,7 @@ def process_packet(pkt):
 def start_sniffing():
     print("Scapy ML Intrusion Detector running... Press Ctrl+C to stop.")
     sniff(
-        iface="en0",  # Your macOS Wi-Fi interface
+        iface="en0",  
         prn=process_packet,
         store=0,
     )
